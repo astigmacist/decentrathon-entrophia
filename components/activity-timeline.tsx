@@ -15,19 +15,20 @@ const ACTION_LABELS: Record<string, string> = {
   secondary_transfer: 'Token Transferred',
   record_payment: 'Repayment Recorded',
   claim_payout: 'Payout Claimed',
+  refund: 'Refund Processed',
   finalize_asset: 'Asset Finalized',
 };
 
 export function ActivityTimeline({ events }: ActivityTimelineProps) {
   return (
-    <ol className="relative border-l border-white/10">
+    <ol className="relative border-l border-white/10 pl-1">
       {events.map((event) => (
         <li key={event.id} className="mb-5 ml-4 last:mb-0">
-          <div className="absolute -left-1.5 mt-1.5 w-3 h-3 rounded-full border border-gray-700 bg-violet-500/40" />
-          <p className="text-xs font-semibold text-gray-200">
+          <div className="absolute -left-[6px] mt-1.5 h-3 w-3 rounded-full border border-violet-500/35 bg-violet-500/35" />
+          <p className="text-sm font-semibold text-slate-200">
             {ACTION_LABELS[event.action] ?? event.action}
           </p>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-slate-500">
             by {shortenAddress(event.actorWallet)}
             {' · '}
             {new Date(event.createdAt).toLocaleString()}
@@ -37,7 +38,7 @@ export function ActivityTimeline({ events }: ActivityTimelineProps) {
               href={explorerUrl(event.txSignature)}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 mt-0.5 transition-colors"
+              className="mt-0.5 inline-flex items-center gap-1 text-xs text-violet-300 transition-colors hover:text-violet-200"
             >
               View on Explorer
               <ExternalLink className="w-3 h-3" />

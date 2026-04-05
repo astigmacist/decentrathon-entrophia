@@ -1,213 +1,401 @@
 'use client';
 
-import { useState } from 'react';
-import { useWallet } from '@solana/wallet-adapter-react';
+import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
+import { useWallet } from '@solana/wallet-adapter-react';
+import { Copy, ExternalLink, Wallet } from 'lucide-react';
+import { toast } from 'sonner';
 import { getPortfolio } from '@/lib/api';
+import { useAnchorProgram } from '@/lib/anchor';
+import { useActiveWallet } from '@/hooks/useActiveWallet';
+import { useDemoStore } from '@/store/demo-store';
 import { StatusBadge } from '@/components/status-badge';
 import { TxButton } from '@/components/tx-button';
-import { formatUsdc } from '@/lib/solana';
-import { toast } from 'sonner';
-import { ArrowRight, ExternalLink, Lock, Wallet } from 'lucide-react';
-import Link from 'next/link';
+import { formatUsdc, shortenAddress } from '@/lib/solana';
+import { cn } from '@/lib/utils';
+import type { PortfolioItem } from '@/types';
+
+type PortfolioFilter = 'all' | 'claimable' | 'holding' | 'settled';
+
+const FILTERS: Array<{ value: PortfolioFilter; label: string }> = [
+  { value: 'all', label: 'All positions' },
+  { value: 'claimable', label: 'Claimable' },
+  { value: 'holding', label: 'Holding' },
+  { value: 'settled', label: 'Settled' },
+];
 
 export default function PortfolioPage() {
   const { publicKey } = useWallet();
+  const { activeWallet } = useActiveWallet();
+  const { claimPayout } = useAnchorProgram();
+  const demoPortfolio = useDemoStore((state) => state.portfolio);
+  const claimPayoutDemo = useDemoStore((state) => state.claimPayoutDemo);
+  const refundDemo = useDemoStore((state) => state.refundDemo);
+  const transferDemo = useDemoStore((state) => state.transferDemo);
 
-  const { data: portfolio, isLoading, isError } = useQuery({
-    queryKey: ['portfolio', publicKey?.toBase58()],
-    queryFn: () => getPortfolio(publicKey!.toBase58()),
-    enabled: !!publicKey,
+  const [filter, setFilter] = useState<PortfolioFilter>('all');
+
+  const {
+    data: livePortfolio,
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ['portfolio', activeWallet],
+    queryFn: () => getPortfolio(activeWallet!),
+    enabled: !!activeWallet,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    staleTime: 30_000,
   });
 
-  if (!publicKey) {
+  if (!activeWallet) {
     return (
-      <div className="mx-auto max-w-xl px-4 py-24 text-center">
-        <Wallet className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-        <p className="text-gray-300 text-lg font-medium">Connect your wallet to view your portfolio.</p>
+      <div className="app-container page-wrap">
+        <div className="panel mx-auto max-w-2xl p-12 text-center">
+          <div className="mx-auto mb-5 inline-flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+            <Wallet className="h-7 w-7 text-slate-400" />
+          </div>
+          <h1 className="text-2xl font-bold text-white">Portfolio needs x-wallet</h1>
+          <p className="mt-2 text-slate-400">
+            Set wallet in the top bar (`x-wallet`) or connect wallet to load investor positions and claims.
+          </p>
+        </div>
       </div>
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="mx-auto max-w-4xl px-4 py-10 space-y-4 animate-pulse">
-        <div className="h-8 bg-white/10 rounded-xl w-48" />
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="h-32 bg-white/5 rounded-2xl border border-white/10" />
-        ))}
-      </div>
-    );
-  }
+  const portfolio = livePortfolio ?? demoPortfolio;
+  const usingDemo = !livePortfolio;
 
-  if (isError) {
-    return (
-      <div className="mx-auto max-w-xl px-4 py-10 text-center">
-        <p className="text-red-400">Failed to load portfolio. Backend may be unavailable.</p>
-      </div>
-    );
-  }
+  const totalInvested = portfolio.reduce((sum, item) => sum + item.contributedUsdc, 0);
+  const totalPayout = portfolio.reduce((sum, item) => sum + item.expectedPayout, 0);
+  const totalYield = totalPayout - totalInvested;
+  const claimableAmount = portfolio
+    .filter((item) => isClaimable(item))
+    .reduce((sum, item) => sum + item.expectedPayout, 0);
 
-  const isEmpty = !portfolio || portfolio.length === 0;
+  const filtered = useMemo(() => {
+    return portfolio.filter((item) => {
+      if (filter === 'all') return true;
+      if (filter === 'claimable') return isClaimable(item);
+      if (filter === 'holding') return isHolding(item);
+      return isSettled(item);
+    });
+  }, [portfolio, filter]);
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-10">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">My Portfolio</h1>
-        <p className="text-gray-400 text-sm font-mono">{publicKey.toBase58()}</p>
-      </div>
-
-      {isEmpty ? (
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-16 text-center">
-          <div className="text-5xl mb-4">💼</div>
-          <p className="text-gray-300 font-medium text-lg">No investments yet</p>
-          <p className="text-sm text-gray-500 mt-1 mb-6">Browse the marketplace to find assets to invest in.</p>
-          <Link
-            href="/marketplace"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium transition-colors"
+    <div className="app-container page-wrap">
+      <header className="section-head">
+        <p className="eyebrow">Portfolio</p>
+        <h1 className="text-4xl font-black tracking-tight text-white sm:text-5xl">Investor Positions & Claims</h1>
+        <p className="max-w-3xl text-base leading-8 text-slate-400 sm:text-lg">
+          Wallet-scoped portfolio for token balances, expected payout, claim actions, refunds, and transfer flow.
+        </p>
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          <span className="tag border-white/12 bg-white/5 text-slate-300">
+            x-wallet: {shortenAddress(activeWallet)}
+          </span>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(activeWallet);
+              toast.success('Wallet copied');
+            }}
+            className="inline-flex items-center gap-1 rounded-md border border-white/12 bg-white/5 px-2.5 py-1 text-xs font-semibold text-slate-300 hover:bg-white/10"
           >
-            Go to Marketplace <ArrowRight className="w-4 h-4" />
-          </Link>
+            <Copy className="h-3.5 w-3.5" />
+            Copy wallet
+          </button>
+          {usingDemo && (
+            <span className="tag border-amber-500/35 bg-amber-500/12 text-amber-200">Demo data mode</span>
+          )}
         </div>
-      ) : (
-        <div className="space-y-4">
-          {portfolio.map((item) => (
-            <div
-              key={item.asset.id}
-              className="rounded-2xl border border-white/10 bg-white/5 p-6"
-            >
-              <div className="flex items-start justify-between flex-wrap gap-4 mb-4">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <StatusBadge status={item.asset.status} />
-                    <span className="text-xs text-gray-500 font-mono">#{item.asset.id.slice(0, 8)}</span>
-                  </div>
-                  <p className="text-xl font-bold text-white">
-                    ${formatUsdc(item.asset.faceValue)} Invoice
-                  </p>
-                </div>
-                <Link
-                  href={`/asset/${item.asset.id}`}
-                  className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1 transition-colors"
-                >
-                  View Asset <ExternalLink className="w-3 h-3" />
-                </Link>
-              </div>
+      </header>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-                {[
-                  { label: 'Your Tokens', value: `${item.tokenBalance.toLocaleString()} INV` },
-                  { label: 'Invested', value: `$${formatUsdc(item.contributedUsdc)} USDC` },
-                  { label: 'Expected Payout', value: `$${formatUsdc(item.expectedPayout)} USDC` },
-                  {
-                    label: 'Status',
-                    value: item.refunded ? 'Refunded' : item.asset.status === 'Paid' ? 'Ready to Claim' : 'Holding',
-                  },
-                ].map((s) => (
-                  <div key={s.label}>
-                    <p className="text-xs text-gray-500">{s.label}</p>
-                    <p className="text-sm font-semibold text-gray-100">{s.value}</p>
-                  </div>
-                ))}
-              </div>
+      <section className="section-space grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Positions" value={portfolio.length.toString()} />
+        <StatCard label="Total Invested" value={`$${formatUsdc(totalInvested)} USDC`} />
+        <StatCard label="Expected Payout" value={`$${formatUsdc(totalPayout)} USDC`} />
+        <StatCard label="Claimable Now" value={`$${formatUsdc(claimableAmount)} USDC`} />
+      </section>
 
-              {/* Actions */}
-              <div className="flex flex-wrap gap-2">
-                {item.asset.status === 'Paid' && !item.refunded && (
-                  <TxButton
-                    label={`Claim $${formatUsdc(item.expectedPayout)} USDC`}
-                    pendingLabel="Claiming..."
-                    onAction={async () => {
-                      // TODO: Anchor claim_payout instruction
-                      await new Promise((r) => setTimeout(r, 2000));
-                      toast.success('Payout claimed!');
-                    }}
-                    variant="primary"
-                    size="sm"
-                  />
+      <section className="section-space panel p-3 sm:p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            {FILTERS.map((item) => (
+              <button
+                key={item.value}
+                onClick={() => setFilter(item.value)}
+                className={cn(
+                  'rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors',
+                  filter === item.value
+                    ? 'border-violet-500/40 bg-violet-500/20 text-violet-200'
+                    : 'border-white/10 bg-white/4 text-slate-400 hover:bg-white/8'
                 )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => void refetch()}
+            className="rounded-lg border border-white/10 bg-white/4 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-white/8"
+          >
+            Refresh
+          </button>
+        </div>
+      </section>
 
-                {item.asset.status === 'Cancelled' && !item.refunded && (
-                  <TxButton
-                    label="Refund"
-                    pendingLabel="Processing refund..."
-                    onAction={async () => {
-                      await new Promise((r) => setTimeout(r, 2000));
-                      toast.success('Refund processed!');
-                    }}
-                    variant="secondary"
-                    size="sm"
-                  />
-                )}
+      {isError && livePortfolio === undefined && (
+        <div className="section-space rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-sm text-amber-200">
+          Backend offline - showing demo portfolio snapshot.
+        </div>
+      )}
 
-                {item.asset.status === 'Funded' && item.tokenBalance > 0 && (
-                  <TransferButton />
-                )}
-              </div>
-            </div>
+      {isLoading && (
+        <div className="section-space space-y-3">
+          {[...Array(3)].map((_, index) => (
+            <div key={index} className="h-44 animate-pulse rounded-2xl border border-white/8 bg-white/5" />
           ))}
         </div>
       )}
+
+      {!isLoading && filtered.length === 0 && (
+        <section className="section-space panel p-12 text-center">
+          <p className="text-xl font-semibold text-slate-200">No positions for selected filter</p>
+          <p className="mt-2 text-sm text-slate-500">Switch filter or open marketplace to start investing.</p>
+          <Link href="/marketplace" className="btn-primary mt-5">
+            Open marketplace
+          </Link>
+        </section>
+      )}
+
+      <section className="section-space space-y-4">
+        {filtered.map((item) => (
+          <PortfolioPositionCard
+            key={item.asset.id}
+            item={item}
+            wallet={activeWallet}
+            canUseConnectedWallet={!!publicKey}
+            onClaim={async () => {
+              try {
+                if (!publicKey) {
+                  throw new Error('demo fallback');
+                }
+                await claimPayout(item.asset.id);
+                toast.success('On-chain claim submitted');
+              } catch {
+                claimPayoutDemo({
+                  assetId: item.asset.id,
+                  investorWallet: activeWallet,
+                });
+                toast.success('Demo payout claimed');
+              }
+            }}
+            onRefund={() => {
+              refundDemo({
+                assetId: item.asset.id,
+                investorWallet: activeWallet,
+              });
+              toast.success('Demo refund processed');
+            }}
+            onTransfer={(recipient, amount) => {
+              transferDemo({
+                assetId: item.asset.id,
+                investorWallet: activeWallet,
+                recipientWallet: recipient,
+                amount,
+              });
+              toast.success('Demo transfer recorded');
+            }}
+          />
+        ))}
+      </section>
     </div>
   );
 }
 
-function TransferButton() {
-  const [open, setOpen] = useState(false);
+function PortfolioPositionCard({
+  item,
+  wallet,
+  canUseConnectedWallet,
+  onClaim,
+  onRefund,
+  onTransfer,
+}: {
+  item: PortfolioItem;
+  wallet: string;
+  canUseConnectedWallet: boolean;
+  onClaim: () => Promise<void>;
+  onRefund: () => void;
+  onTransfer: (recipient: string, amount: number) => void;
+}) {
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
+  const [openTransfer, setOpenTransfer] = useState(false);
 
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white/10 hover:bg-white/15 text-gray-200 border border-white/10 transition-colors"
-      >
-        Transfer Tokens
-      </button>
-    );
-  }
+  const claimable = isClaimable(item);
+  const refundable = item.asset.status === 'Cancelled' && !item.refunded;
+  const canTransfer = (item.asset.status === 'Funded' || item.asset.status === 'Paid') && item.tokenBalance > 0;
 
   return (
-    <div className="w-full mt-2 p-4 rounded-xl bg-white/5 border border-amber-500/30 space-y-3">
-      <div className="flex items-center gap-2 text-xs text-amber-300">
-        <Lock className="w-3.5 h-3.5" />
-        Transfer only works to allowlisted wallets (enforced on-chain)
-      </div>
-      <div className="flex gap-2">
-        <input
-          value={recipient}
-          onChange={(e) => setRecipient(e.target.value)}
-          placeholder="Recipient wallet address"
-          className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-        />
-        <input
-          type="number"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="Amount"
-          className="w-24 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-        />
-      </div>
-      <div className="flex gap-2">
-        <TxButton
-          label="Send Transfer"
-          pendingLabel="Sending..."
-          onAction={async () => {
-            if (!recipient || !amount) { toast.error('Fill recipient and amount'); throw new Error(); }
-            await new Promise((r) => setTimeout(r, 2000));
-            toast.success('Transfer submitted!');
-            setOpen(false);
-          }}
-          size="sm"
-        />
-        <button
-          onClick={() => setOpen(false)}
-          className="px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:text-white transition-colors"
+    <article className="panel p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={item.asset.status} />
+            <span className="tag border-white/12 bg-white/5 text-slate-300">
+              #{item.asset.id.slice(0, 10)}
+            </span>
+          </div>
+          <h3 className="mt-2 text-xl font-black text-white">${formatUsdc(item.asset.faceValue)} USDC Invoice</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Asset {item.asset.id} · Issuer {shortenAddress(item.asset.issuerWallet)}
+          </p>
+        </div>
+        <Link
+          href={`/asset/${item.asset.id}`}
+          className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/4 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-white/8"
         >
-          Cancel
-        </button>
+          Details
+          <ExternalLink className="h-3.5 w-3.5" />
+        </Link>
       </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Info label="Token Balance" value={item.tokenBalance.toLocaleString()} />
+        <Info label="Contributed" value={`$${formatUsdc(item.contributedUsdc)} USDC`} />
+        <Info label="Expected Payout" value={`$${formatUsdc(item.expectedPayout)} USDC`} />
+        <Info
+          label="Position State"
+          value={
+            item.refunded
+              ? 'Refunded'
+              : item.claimed
+              ? 'Claimed'
+              : claimable
+              ? 'Ready to claim'
+              : 'Holding'
+          }
+        />
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {claimable && (
+          <TxButton
+            label="Claim payout"
+            pendingLabel="Claiming..."
+            onAction={onClaim}
+            size="sm"
+          />
+        )}
+        {refundable && (
+          <TxButton
+            label="Refund"
+            pendingLabel="Processing..."
+            onAction={async () => onRefund()}
+            variant="secondary"
+            size="sm"
+          />
+        )}
+        {canTransfer && (
+          <button
+            onClick={() => setOpenTransfer((value) => !value)}
+            className="rounded-lg border border-white/10 bg-white/4 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-white/8"
+          >
+            {openTransfer ? 'Hide transfer' : 'Transfer tokens'}
+          </button>
+        )}
+      </div>
+
+      {!canUseConnectedWallet && claimable && (
+        <p className="mt-2 text-xs text-amber-200">
+          Connected wallet is missing, action uses demo fallback with x-wallet: {shortenAddress(wallet)}.
+        </p>
+      )}
+
+      {openTransfer && canTransfer && (
+        <div className="mt-3 rounded-xl border border-white/10 bg-white/4 p-3">
+          <p className="text-xs text-slate-400">
+            Secondary transfer is demo-backed here. Use allowlisted recipient wallet.
+          </p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_140px_auto]">
+            <input
+              value={recipient}
+              onChange={(event) => setRecipient(event.target.value)}
+              placeholder="Recipient wallet"
+              className="input-base"
+            />
+            <input
+              type="number"
+              min="1"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              placeholder="Tokens"
+              className="input-base"
+            />
+            <TxButton
+              label="Send"
+              pendingLabel="Sending..."
+              onAction={async () => {
+                const numeric = Number.parseInt(amount, 10);
+                if (!recipient.trim() || !Number.isFinite(numeric) || numeric <= 0) {
+                  toast.error('Enter recipient and valid token amount');
+                  throw new Error('invalid transfer payload');
+                }
+                if (numeric > item.tokenBalance) {
+                  toast.error('Transfer amount exceeds token balance');
+                  throw new Error('amount exceeds balance');
+                }
+                onTransfer(recipient.trim(), numeric);
+                setRecipient('');
+                setAmount('');
+                setOpenTransfer(false);
+              }}
+              size="sm"
+              className="justify-center"
+            />
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function StatCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="stat-card">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <p className="mt-2 text-2xl font-black text-white sm:text-3xl">{value}</p>
     </div>
   );
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-white/8 bg-white/4 px-3 py-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-200">{value}</p>
+    </div>
+  );
+}
+
+function isClaimable(item: PortfolioItem) {
+  return item.asset.status === 'Paid' && !item.refunded && !item.claimed;
+}
+
+function isHolding(item: PortfolioItem) {
+  return (
+    !item.refunded
+    && !item.claimed
+    && item.asset.status !== 'Paid'
+    && item.asset.status !== 'Closed'
+    && item.asset.status !== 'Cancelled'
+  );
+}
+
+function isSettled(item: PortfolioItem) {
+  return item.refunded || item.claimed || item.asset.status === 'Closed' || item.asset.status === 'Cancelled';
 }

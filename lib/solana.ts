@@ -6,14 +6,54 @@ export const RPC_URL =
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-export const PROGRAM_ID = new PublicKey(
-  process.env.NEXT_PUBLIC_PROGRAM_ID ||
-    '11111111111111111111111111111111'
+const warnedEnvKeys = new Set<string>();
+
+function sanitizeBase58Env(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const lowered = trimmed.toLowerCase();
+  if (
+    lowered === 'your_program_id'
+    || lowered === 'your_program_id_here'
+    || lowered === 'replace_me'
+    || lowered === 'changeme'
+  ) {
+    return undefined;
+  }
+  return trimmed.replaceAll('<', '').replaceAll('>', '');
+}
+
+function publicKeyFromEnv(
+  value: string | undefined,
+  fallbackBase58: string,
+  label: string
+): PublicKey {
+  const candidate = sanitizeBase58Env(value) ?? fallbackBase58;
+  try {
+    return new PublicKey(candidate);
+  } catch {
+    if (process.env.NODE_ENV !== 'production' && !warnedEnvKeys.has(label)) {
+      warnedEnvKeys.add(label);
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[solana] Invalid ${label} public key "${candidate}". Using fallback "${fallbackBase58}".`
+      );
+    }
+    return new PublicKey(fallbackBase58);
+  }
+}
+
+export const PROGRAM_ID = publicKeyFromEnv(
+  process.env.NEXT_PUBLIC_PROGRAM_ID,
+  '11111111111111111111111111111111',
+  'NEXT_PUBLIC_PROGRAM_ID'
 );
 
-export const USDC_MINT = new PublicKey(
-  process.env.NEXT_PUBLIC_USDC_MINT ||
-    '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'
+export const USDC_MINT = publicKeyFromEnv(
+  process.env.NEXT_PUBLIC_USDC_MINT,
+  '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+  'NEXT_PUBLIC_USDC_MINT'
 );
 
 export const connection = new Connection(RPC_URL, 'confirmed');

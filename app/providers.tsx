@@ -12,6 +12,7 @@ import {
 } from '@solana/wallet-adapter-wallets';
 import { RPC_URL } from '@/lib/solana';
 import { RoleProvider } from '@/hooks/useRole';
+import { ActiveWalletProvider } from '@/hooks/useActiveWallet';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 
@@ -37,10 +38,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <ConnectionProvider endpoint={RPC_URL}>
         <WalletProvider wallets={wallets} autoConnect>
           <WalletModalProvider>
-            <RoleProvider>
-              {children}
-              <Toaster richColors position="top-right" />
-            </RoleProvider>
+            <ActiveWalletProvider>
+              <RoleProvider>
+                {children}
+                <Toaster richColors position="top-right" />
+              </RoleProvider>
+            </ActiveWalletProvider>
           </WalletModalProvider>
         </WalletProvider>
       </ConnectionProvider>

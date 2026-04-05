@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["127.0.0.1"],
   webpack: (config, { isServer }) => {
     if (!isServer) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports

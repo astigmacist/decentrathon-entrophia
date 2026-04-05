@@ -56,6 +56,7 @@ export interface PortfolioItem {
   contributedUsdc: number;
   expectedPayout: number;
   refunded: boolean;
+  claimed?: boolean;
 }
 
 // ─── Activity / History ──────────────────────────────────────────────────────
