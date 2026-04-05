@@ -1,0 +1,20 @@
+[features]
+seeds = false
+skip-lint = false
+
+[programs.devnet]
+# Replace both IDs with deployed devnet program addresses before running anchor deploy.
+receivables_program = "11111111111111111111111111111111"
+transfer_hook_program = "11111111111111111111111111111111"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "Devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "node --test tests/anchor/*.test.mjs"
+deploy = "node migrations/deploy.mjs"
+init = "node migrations/init.mjs"

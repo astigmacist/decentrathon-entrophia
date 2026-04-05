@@ -1,0 +1,26 @@
+<svg width="760" height="200" viewBox="0 0 760 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M22 46C22 39.3726 27.3726 34 34 34H106C115.278 34 119.917 45.2117 113.282 51.8794L90.639 74.618H53.2C46.5726 74.618 41.2 79.9906 41.2 86.618V123.337L22 142.618V46Z" fill="url(#paint0_linear)"/>
+  <path d="M41.2 152L61.2 131.857H91.0672C97.6946 131.857 103.067 126.485 103.067 119.857V110.086H41.2V152Z" fill="url(#paint1_linear)"/>
+  <path d="M41.2 100.314V86.618C41.2 79.9906 46.5726 74.618 53.2 74.618H65.3333L41.2 100.314Z" fill="url(#paint2_linear)"/>
+  <path d="M73.8667 74.618L97.2539 51.2904C99.5166 49.0323 102.593 47.7638 105.8 47.7638H138.571C147.848 47.7638 152.487 58.9755 145.853 65.6431L136.842 74.618H73.8667Z" fill="url(#paint3_linear)"/>
+  <text x="165" y="98" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="700" letter-spacing="1">FACTORA</text>
+  <text x="166" y="140" fill="#8D6BFF" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="500" letter-spacing="3">RWA RECEIVABLES</text>
+  <defs>
+    <linearGradient id="paint0_linear" x1="22" y1="34" x2="118.486" y2="142.618" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8E6BFF"/>
+      <stop offset="1" stop-color="#4E1FCF"/>
+    </linearGradient>
+    <linearGradient id="paint1_linear" x1="41.2" y1="110.086" x2="107.121" y2="155.951" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6D47E8"/>
+      <stop offset="1" stop-color="#8E6BFF"/>
+    </linearGradient>
+    <linearGradient id="paint2_linear" x1="41.2" y1="74.618" x2="68.8771" y2="99.4386" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A38BFF"/>
+      <stop offset="1" stop-color="#6C42E4"/>
+    </linearGradient>
+    <linearGradient id="paint3_linear" x1="73.8667" y1="47.7638" x2="105.485" y2="96.6774" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A88FFF"/>
+      <stop offset="1" stop-color="#7A56F5"/>
+    </linearGradient>
+  </defs>
+</svg>

@@ -1,0 +1,15 @@
+# Monorepo root
+node_modules/
+**/.next/
+out/
+dist/
+build/
+target/
+.anchor/
+.DS_Store
+*.log
+.idea/
+.vscode/
+.env
+.env.local
+.env.*.local

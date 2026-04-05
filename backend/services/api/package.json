@@ -1,0 +1,47 @@
+{
+  "name": "@rwa/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "dev": "nest start --watch",
+    "start": "node dist/main.js",
+    "start:dev": "nest start --watch",
+    "build": "nest build",
+    "lint": "npm run typecheck",
+    "test": "node --test",
+    "db:migrate": "ts-node scripts/db-migrate.ts",
+    "db:seed": "ts-node scripts/db-seed.ts",
+    "db:backfill-asset-pda": "ts-node scripts/backfill-asset-pda.ts",
+    "typecheck": "tsc --noEmit",
+    "prisma:generate": "prisma generate"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1022.0",
+    "@nestjs/common": "^11.1.17",
+    "@nestjs/config": "^4.0.3",
+    "@nestjs/core": "^11.1.17",
+    "@nestjs/platform-express": "^11.1.17",
+    "@prisma/client": "^5.20.0",
+    "@solana/web3.js": "^1.98.4",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "dotenv": "^16.4.5",
+    "joi": "^17.13.3",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.17",
+    "@types/express": "^5.0.0",
+    "@types/multer": "^2.1.0",
+    "@types/node": "^22.8.4",
+    "prisma": "^5.20.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  },
+  "overrides": {
+    "path-to-regexp": "8.4.1",
+    "picomatch": "4.0.4"
+  }
+}

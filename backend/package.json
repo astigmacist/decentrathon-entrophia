@@ -1,0 +1,21 @@
+{
+  "name": "deceathron-onchain-workspace",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "anchor:deploy:check": "node migrations/deploy.mjs",
+    "anchor:init:check": "node migrations/init.mjs",
+    "anchor:test": "node --test tests/anchor/*.test.mjs",
+    "integration:test": "node --test tests/integration/*.test.mjs",
+    "day6:test": "npm run anchor:test && npm run integration:test",
+    "demo:seed-wallets": "node scripts/seed-demo/seed-wallets.mjs",
+    "demo:seed-allowlist": "node scripts/seed-demo/seed-allowlist.mjs",
+    "demo:seed-asset": "node scripts/seed-demo/seed-asset.mjs",
+    "demo:reset": "node scripts/seed-demo/reset-demo-state.mjs",
+    "demo:run-flow": "node scripts/seed-demo/run-demo-flow.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1"
+  }
+}

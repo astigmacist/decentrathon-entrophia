@@ -1,0 +1,192 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  wallet      String   @unique
+  role        String
+  displayName String?  @map("display_name")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Asset {
+  id                         String          @id @default(uuid())
+  assetId                    String          @unique @map("asset_id")
+  issuerWallet               String          @map("issuer_wallet")
+  status                     AssetStatus     @default(Created)
+  faceValue                  BigInt          @map("face_value")
+  dueDate                    DateTime        @map("due_date")
+  mint                       String?
+  assetPda                   String?         @map("asset_pda")
+  assetTokenVault            String?         @map("asset_token_vault")
+  fundingVault               String?         @map("funding_vault")
+  payoutVault                String?         @map("payout_vault")
+  lastEventSlot              BigInt?         @map("last_event_slot")
+  metadataUri                String?         @map("metadata_uri")
+  payoutPoolBase             BigInt?         @map("payout_pool_base")
+  claimedTotalBase           BigInt          @default(0) @map("claimed_total_base")
+  payoutSnapshotAt           DateTime?       @map("payout_snapshot_at")
+  payoutOutstandingTokenBase BigInt?         @map("payout_outstanding_token_base")
+  createdAt                  DateTime        @default(now()) @map("created_at")
+  updatedAt                  DateTime        @updatedAt @map("updated_at")
+  documents                  Document[]
+  payments                   Payment[]
+  claimSnapshots             ClaimSnapshot[]
+  claimRequests              ClaimRequest[]
+
+  @@index([status])
+  @@index([issuerWallet])
+  @@map("assets")
+}
+
+model Document {
+  id          String   @id @default(uuid())
+  assetId     String   @map("asset_id")
+  asset       Asset    @relation(fields: [assetId], references: [id])
+  filename    String
+  fileUri     String   @map("file_uri")
+  contentHash String   @map("content_hash")
+  kind        String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([assetId])
+  @@map("documents")
+}
+
+model ReviewAction {
+  id             String   @id @default(uuid())
+  assetId        String   @map("asset_id")
+  verifierWallet String   @map("verifier_wallet")
+  decision       String
+  comment        String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([assetId, createdAt])
+  @@map("review_actions")
+}
+
+model WhitelistEntry {
+  id         String   @id @default(uuid())
+  wallet     String   @unique
+  roleMask   String   @map("role_mask")
+  kycRefHash String?  @map("kyc_ref_hash")
+  active     Boolean  @default(true)
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("whitelist_entries")
+}
+
+model Payment {
+  id             String   @id @default(uuid())
+  assetId        String   @map("asset_id")
+  asset          Asset    @relation(fields: [assetId], references: [assetId])
+  evidenceHash   String   @map("evidence_hash")
+  amount         BigInt
+  operatorWallet String   @map("operator_wallet")
+  comment        String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([assetId, createdAt])
+  @@unique([assetId, evidenceHash])
+  @@map("payments")
+}
+
+model InvestmentReceipt {
+  id                      String   @id @default(uuid())
+  assetId                 String   @map("asset_id")
+  investorWallet          String   @map("investor_wallet")
+  amountUsdcBase          BigInt   @map("amount_usdc_base")
+  receivedAssetTokensBase BigInt   @map("received_asset_tokens_base")
+  refunded                Boolean  @default(false)
+  refundedAt              DateTime? @map("refunded_at")
+  txSig                   String?  @map("tx_sig")
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  @@index([assetId, createdAt])
+  @@index([assetId, investorWallet])
+  @@map("investment_receipts")
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  action     String
+  wallet     String?
+  result     String?
+  payload    Json?
+  txSig      String?  @map("tx_sig")
+  slot       BigInt?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId, createdAt])
+  @@map("activity_log")
+}
+
+model IndexerCursor {
+  key               String   @id
+  lastProcessedSlot BigInt   @default(0) @map("last_processed_slot")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("indexer_cursors")
+}
+
+model ClaimSnapshot {
+  id                  String   @id @default(uuid())
+  assetId             String   @map("asset_id")
+  asset               Asset    @relation(fields: [assetId], references: [assetId])
+  wallet              String
+  holderTokenBase     BigInt   @map("holder_token_base")
+  baseClaimAmountBase BigInt   @map("base_claim_amount_base")
+  claimedAmountBase   BigInt   @default(0) @map("claimed_amount_base")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@unique([assetId, wallet])
+  @@index([wallet, assetId])
+  @@map("claim_snapshots")
+}
+
+model ClaimRequest {
+  id                   String             @id @default(uuid())
+  assetId              String             @map("asset_id")
+  asset                Asset              @relation(fields: [assetId], references: [assetId])
+  wallet               String
+  claimAmountBase      BigInt             @map("claim_amount_base")
+  isLastClaimCandidate Boolean            @default(false) @map("is_last_claim_candidate")
+  txPayload            Json?              @map("tx_payload")
+  txSignature          String?            @unique @map("tx_signature")
+  status               ClaimRequestStatus @default(Prepared)
+  createdAt            DateTime           @default(now()) @map("created_at")
+  confirmedAt          DateTime?          @map("confirmed_at")
+
+  @@index([assetId, wallet, status])
+  @@map("claim_requests")
+}
+
+enum AssetStatus {
+  Created
+  Verified
+  FundingOpen
+  Funded
+  Paid
+  Cancelled
+  Closed
+}
+
+enum ClaimRequestStatus {
+  Prepared
+  Confirmed
+  Failed
+}
