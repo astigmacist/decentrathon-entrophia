@@ -48,6 +48,8 @@ interface BackendAssetDetailDto {
   status: Asset['status'];
   faceValue: string;
   dueDate: string;
+  debtorRefHash: string | null;
+  invoiceHash: string | null;
   mint: string | null;
   metadataUri: string | null;
   expectedYield: string;
@@ -62,6 +64,8 @@ interface BackendCreateAssetDto {
   status: 'Created';
   faceValue: string;
   dueDate: string;
+  debtorRefHash: string | null;
+  invoiceHash: string | null;
 }
 
 interface BackendDocumentDto {
@@ -91,6 +95,63 @@ interface BackendPortfolioPositionDto {
   claimableBase: string | null;
 }
 
+interface BackendBuyPrimaryResponseDto {
+  assetId: string;
+  status: 'FundingOpen';
+  investorWallet: string;
+  contributedUsdcBase: string;
+  receivedAssetTokensBase: string;
+  totalContributedUsdcBase: string;
+  issuedTokensBase: string;
+  remainingFundingUsdcBase: string;
+  remainingAssetTokensBase: string;
+  txSig: string;
+}
+
+interface BackendClaimResponseDto {
+  mode: 'sync' | 'client';
+  assetId: string;
+  wallet: string;
+  claimRequestId: string;
+  txSignature: string | null;
+  status: 'prepared' | 'confirmed';
+  nextAction: 'none' | 'sign';
+  unsignedTx: string | null;
+  claimAmountBase: string;
+}
+
+interface BackendRefundResponseDto {
+  assetId: string;
+  investorWallet: string;
+  refundedReceiptIds: string[];
+  txSig: string | null;
+  unsignedTx: string | null;
+  nextAction: 'none' | 'sign';
+}
+
+interface BackendTransferValidationDto {
+  allowed: boolean;
+  assetId: string;
+  fromWallet: string;
+  toWallet: string;
+  amountBaseUnits: string;
+  availableBalanceBaseUnits: string;
+  reasonCode: string | null;
+  hints: string[];
+}
+
+interface BackendTransferPrepareResponseDto {
+  validation: BackendTransferValidationDto;
+  payload: {
+    programId: string | null;
+    fromWallet: string;
+    toWallet: string;
+    assetId: string;
+    amountBaseUnits: string;
+    memo: string;
+  } | null;
+}
+
 interface BackendReviewQueueItemDto {
   assetId: string;
   issuerWallet: string;
@@ -118,7 +179,32 @@ interface BackendWhitelistEntryDto {
 interface BackendUserContextDto {
   wallet: string;
   role: 'issuer' | 'investor' | 'verifier' | 'admin' | 'unknown';
+  roles?: Array<'issuer' | 'investor' | 'verifier' | 'admin'>;
   displayName: string | null;
+}
+
+interface BackendAuthChallengeDto {
+  wallet: string;
+  nonce: string;
+  message: string;
+  expiresAt: string;
+}
+
+interface BackendAuthSessionDto {
+  token: string;
+  wallet: string;
+  role: UserRole;
+  roles: Array<'issuer' | 'investor' | 'verifier' | 'admin'>;
+  displayName: string | null;
+  expiresAt: string;
+}
+
+interface BackendAuthMeDto {
+  wallet: string;
+  role: UserRole;
+  roles: Array<'issuer' | 'investor' | 'verifier' | 'admin'>;
+  displayName: string | null;
+  sessionExpiresAt: string;
 }
 
 const api = axios.create({
@@ -128,6 +214,7 @@ const api = axios.create({
 });
 
 let activeWalletHeader: string | null = null;
+let authTokenHeader: string | null = null;
 const errorListeners = new Set<(error: ApiErrorInfo) => void>();
 
 function generateTraceId() {
@@ -179,6 +266,9 @@ api.interceptors.request.use((config) => {
   headers['x-trace-id'] = traceId;
   if (activeWalletHeader) {
     headers['x-wallet'] = activeWalletHeader;
+  }
+  if (authTokenHeader) {
+    headers.Authorization = `Bearer ${authTokenHeader}`;
   }
   config.headers = headers;
   return config;
@@ -273,8 +363,8 @@ function mapAssetDetailToAsset(detail: BackendAssetDetailDto): Asset {
     fundingTarget: toBaseUnitsNumber(detail.funding.fundingTargetBase),
     fundingRaised: toBaseUnitsNumber(detail.funding.totalContributedUsdcBase),
     dueDateTs: toUnixSeconds(detail.dueDate),
-    debtorRefHash: '',
-    invoiceHash: '',
+    debtorRefHash: detail.debtorRefHash ?? '',
+    invoiceHash: detail.invoiceHash ?? '',
     metadataUri: detail.metadataUri ?? '',
     mint: detail.mint ?? undefined,
     createdAt: detail.createdAt,
@@ -308,6 +398,14 @@ export function setApiWalletHeader(wallet: string | null) {
 
 export function getApiWalletHeader() {
   return activeWalletHeader;
+}
+
+export function setApiAuthToken(token: string | null) {
+  authTokenHeader = token?.trim() || null;
+}
+
+export function getApiAuthToken() {
+  return authTokenHeader;
 }
 
 export function subscribeApiErrors(listener: (error: ApiErrorInfo) => void) {
@@ -348,17 +446,51 @@ export async function getHealth(): Promise<{ ok: boolean; endpoint: string }> {
   throw lastError ?? { message: 'Health endpoint unavailable' };
 }
 
-export async function getUser(wallet: string): Promise<{ role: UserRole; displayName?: string }> {
+export async function getUser(wallet: string): Promise<{ role: UserRole; roles: UserRole[]; displayName?: string }> {
   const { data } = await api.get<BackendUserContextDto>(`/api/users/${wallet}`);
   return {
     role: data.role,
+    roles: data.roles ?? (data.role !== 'unknown' ? [data.role] : []),
     displayName: data.displayName ?? undefined,
   };
+}
+
+export async function requestAuthChallenge(wallet: string): Promise<BackendAuthChallengeDto> {
+  const { data } = await api.post<BackendAuthChallengeDto>('/api/auth/challenge', { wallet });
+  return data;
+}
+
+export async function verifyAuthChallenge(payload: {
+  wallet: string;
+  nonce: string;
+  signature: string;
+}): Promise<BackendAuthSessionDto> {
+  const { data } = await api.post<BackendAuthSessionDto>('/api/auth/verify', payload);
+  return data;
+}
+
+export async function getAuthMe(): Promise<BackendAuthMeDto> {
+  const { data } = await api.get<BackendAuthMeDto>('/api/auth/me');
+  return data;
+}
+
+export async function updateAuthProfile(displayName: string): Promise<BackendAuthMeDto> {
+  const { data } = await api.patch<BackendAuthMeDto>('/api/auth/profile', { displayName });
+  return data;
+}
+
+export async function logoutAuth(): Promise<void> {
+  await api.post('/api/auth/logout');
 }
 
 export async function getMarketplace(): Promise<Asset[]> {
   const { data } = await api.get<BackendMarketplaceItemDto[]>('/api/marketplace');
   return data.map(mapMarketplaceItemToAsset);
+}
+
+export async function getAssets(): Promise<Asset[]> {
+  const { data } = await api.get<BackendAssetDetailDto[]>('/api/assets');
+  return data.map(mapAssetDetailToAsset);
 }
 
 export async function getAsset(id: string): Promise<Asset> {
@@ -371,11 +503,14 @@ export async function createAsset(payload: {
   discountBps: number;
   dueDateTs: number;
   debtorRefHash: string;
+  invoiceHash: string;
   issuerWallet: string;
 }): Promise<Asset> {
   const { data } = await api.post<BackendCreateAssetDto>('/api/assets', {
     faceValue: String(payload.faceValue),
     dueDate: new Date(payload.dueDateTs * 1000).toISOString(),
+    debtorRefHash: payload.debtorRefHash,
+    invoiceHash: payload.invoiceHash,
   });
 
   return {
@@ -387,8 +522,8 @@ export async function createAsset(payload: {
     fundingTarget: Math.round(payload.faceValue * (1 - payload.discountBps / 10_000)),
     fundingRaised: 0,
     dueDateTs: toUnixSeconds(data.dueDate),
-    debtorRefHash: payload.debtorRefHash,
-    invoiceHash: '',
+    debtorRefHash: data.debtorRefHash ?? payload.debtorRefHash,
+    invoiceHash: data.invoiceHash ?? payload.invoiceHash,
     metadataUri: '',
     mint: undefined,
     createdAt: new Date().toISOString(),
@@ -445,6 +580,45 @@ export async function getPortfolio(wallet: string): Promise<PortfolioItem[]> {
       claimed: asset.status === 'Paid' && position.claimableBase === '0',
     };
   });
+}
+
+export async function buyPrimary(
+  assetId: string,
+  amountUsdcBaseUnits: number
+): Promise<BackendBuyPrimaryResponseDto> {
+  const { data } = await api.post<BackendBuyPrimaryResponseDto>(`/api/assets/${assetId}/buy-primary`, {
+    amountUsdcBaseUnits: String(Math.round(amountUsdcBaseUnits)),
+  });
+  return data;
+}
+
+export async function claimAsset(assetId: string): Promise<BackendClaimResponseDto> {
+  const { data } = await api.post<BackendClaimResponseDto>(`/api/assets/${assetId}/claim`, {
+    mode: 'sync',
+  });
+  return data;
+}
+
+export async function refundAsset(assetId: string): Promise<BackendRefundResponseDto> {
+  const { data } = await api.post<BackendRefundResponseDto>(`/api/assets/${assetId}/refund`, {
+    mode: 'sync',
+  });
+  return data;
+}
+
+export async function prepareTransfer(payload: {
+  assetId: string;
+  fromWallet: string;
+  toWallet: string;
+  amountBaseUnits: number;
+}): Promise<BackendTransferPrepareResponseDto> {
+  const { data } = await api.post<BackendTransferPrepareResponseDto>('/api/transfers/prepare', {
+    assetId: payload.assetId,
+    fromWallet: payload.fromWallet,
+    toWallet: payload.toWallet,
+    amountBaseUnits: String(Math.round(payload.amountBaseUnits)),
+  });
+  return data;
 }
 
 export async function getActivity(assetId: string): Promise<ActivityEvent[]> {
@@ -550,4 +724,8 @@ export async function recordPayment(
     amountBaseUnits: String(Math.round(amount)),
     evidenceHash,
   });
+}
+
+export async function finalizeAsset(assetId: string): Promise<void> {
+  await api.post(`/api/assets/${assetId}/finalize`);
 }

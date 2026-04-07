@@ -31,9 +31,11 @@ export class SettlementService {
     const chainResult = this.solanaService
       ? await this.solanaService.orchestrate({
       action: "record_payment",
+      mode: "sync",
       wallet: operatorWallet,
       entityType: "asset",
       entityId: normalizedAssetId,
+      txSig: body.txSig,
       payload: { instruction: "record_payment", amountBaseUnits: body.amountBaseUnits, evidenceHash },
     })
       : {
@@ -200,16 +202,22 @@ export class SettlementService {
     });
   }
 
-  async finalizeAsset(assetId: string, wallet: string | undefined): Promise<FinalizeAssetResponseDto> {
+  async finalizeAsset(
+    assetId: string,
+    wallet: string | undefined,
+    txSig: string | undefined,
+  ): Promise<FinalizeAssetResponseDto> {
     const operatorWallet = this.normalizeWallet(wallet);
-    await this.assertAdminOrAttestor(operatorWallet);
+    await this.assertAdmin(operatorWallet);
     const normalizedAssetId = this.normalizeAssetId(assetId);
     const chainResult = this.solanaService
       ? await this.solanaService.orchestrate({
       action: "finalize_asset",
+      mode: "sync",
       wallet: operatorWallet,
       entityType: "asset",
       entityId: normalizedAssetId,
+      txSig,
       payload: { instruction: "finalize_asset" },
     })
       : {
@@ -358,6 +366,30 @@ export class SettlementService {
     throw new AppException(
       "FORBIDDEN_ROLE",
       "Only Admin or Attestor can perform this action",
+      HttpStatus.FORBIDDEN,
+    );
+  }
+
+  private async assertAdmin(wallet: string): Promise<"Admin"> {
+    const user = await this.prisma.user.findUnique({
+      where: { wallet },
+      select: { role: true, active: true },
+    });
+    if (user?.active && user.role === "Admin") {
+      return "Admin";
+    }
+
+    const whitelistEntry = await this.prisma.whitelistEntry.findFirst({
+      where: { wallet, active: true },
+      select: { roleMask: true },
+    });
+    if (whitelistEntry?.roleMask.includes("Admin")) {
+      return "Admin";
+    }
+
+    throw new AppException(
+      "FORBIDDEN_ROLE",
+      "Only Admin can finalize an asset",
       HttpStatus.FORBIDDEN,
     );
   }

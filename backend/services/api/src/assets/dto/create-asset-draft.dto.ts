@@ -8,6 +8,17 @@ export class CreateAssetDraftDto {
   @IsISO8601()
   dueDate!: string;
 
+  @IsString()
+  debtorRefHash!: string;
+
+  @IsOptional()
+  @IsString()
+  invoiceHash?: string;
+
+  @IsOptional()
+  @IsString()
+  txSig?: string;
+
   @IsOptional()
   @IsString()
   metadataUri?: string;

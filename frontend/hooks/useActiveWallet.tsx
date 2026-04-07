@@ -47,9 +47,10 @@ export function ActiveWalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const activeWallet = useMemo(() => {
+    if (connectedWallet) return connectedWallet;
     const manual = manualWallet.trim();
     if (manual) return manual;
-    return connectedWallet;
+    return null;
   }, [manualWallet, connectedWallet]);
 
   useEffect(() => {

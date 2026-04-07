@@ -3,11 +3,9 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { useWallet } from '@solana/wallet-adapter-react';
 import { Copy, ExternalLink, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
-import { getPortfolio } from '@/lib/api';
-import { useAnchorProgram } from '@/lib/anchor';
+import { claimAsset, formatApiError, getPortfolio, prepareTransfer, refundAsset } from '@/lib/api';
 import { useActiveWallet } from '@/hooks/useActiveWallet';
 import { useDemoStore } from '@/store/demo-store';
 import { StatusBadge } from '@/components/status-badge';
@@ -26,9 +24,7 @@ const FILTERS: Array<{ value: PortfolioFilter; label: string }> = [
 ];
 
 export default function PortfolioPage() {
-  const { publicKey } = useWallet();
   const { activeWallet } = useActiveWallet();
-  const { claimPayout } = useAnchorProgram();
   const demoPortfolio = useDemoStore((state) => state.portfolio);
   const claimPayoutDemo = useDemoStore((state) => state.claimPayoutDemo);
   const refundDemo = useDemoStore((state) => state.refundDemo);
@@ -175,37 +171,67 @@ export default function PortfolioPage() {
             key={item.asset.id}
             item={item}
             wallet={activeWallet}
-            canUseConnectedWallet={!!publicKey}
+            usingDemo={usingDemo}
             onClaim={async () => {
-              try {
-                if (!publicKey) {
-                  throw new Error('demo fallback');
-                }
-                await claimPayout(item.asset.id);
-                toast.success('On-chain claim submitted');
-              } catch {
+              if (usingDemo) {
                 claimPayoutDemo({
                   assetId: item.asset.id,
                   investorWallet: activeWallet,
                 });
                 toast.success('Demo payout claimed');
+              } else {
+                try {
+                  const result = await claimAsset(item.asset.id);
+                  toast.success(result.status === 'confirmed' ? 'Payout claimed' : 'Claim prepared');
+                } catch (error) {
+                  toast.error(formatApiError(error));
+                  throw error;
+                }
               }
             }}
-            onRefund={() => {
-              refundDemo({
-                assetId: item.asset.id,
-                investorWallet: activeWallet,
-              });
-              toast.success('Demo refund processed');
+            onRefund={async () => {
+              if (usingDemo) {
+                refundDemo({
+                  assetId: item.asset.id,
+                  investorWallet: activeWallet,
+                });
+                toast.success('Demo refund processed');
+              } else {
+                try {
+                  await refundAsset(item.asset.id);
+                  toast.success('Refund processed');
+                } catch (error) {
+                  toast.error(formatApiError(error));
+                  throw error;
+                }
+              }
             }}
-            onTransfer={(recipient, amount) => {
-              transferDemo({
-                assetId: item.asset.id,
-                investorWallet: activeWallet,
-                recipientWallet: recipient,
-                amount,
-              });
-              toast.success('Demo transfer recorded');
+            onTransfer={async (recipient, amount) => {
+              if (usingDemo) {
+                transferDemo({
+                  assetId: item.asset.id,
+                  investorWallet: activeWallet,
+                  recipientWallet: recipient,
+                  amount,
+                });
+                toast.success('Demo transfer recorded');
+              } else {
+                try {
+                  const prepared = await prepareTransfer({
+                    assetId: item.asset.id,
+                    fromWallet: activeWallet,
+                    toWallet: recipient,
+                    amountBaseUnits: amount * 1_000_000,
+                  });
+                  if (!prepared.validation.allowed) {
+                    throw new Error(prepared.validation.hints[0] ?? 'Transfer is not allowed');
+                  }
+                  toast.success('Transfer validated and prepared');
+                } catch (error) {
+                  toast.error(formatApiError(error));
+                  throw error;
+                }
+              }
             }}
           />
         ))}
@@ -217,17 +243,17 @@ export default function PortfolioPage() {
 function PortfolioPositionCard({
   item,
   wallet,
-  canUseConnectedWallet,
+  usingDemo,
   onClaim,
   onRefund,
   onTransfer,
 }: {
   item: PortfolioItem;
   wallet: string;
-  canUseConnectedWallet: boolean;
+  usingDemo: boolean;
   onClaim: () => Promise<void>;
-  onRefund: () => void;
-  onTransfer: (recipient: string, amount: number) => void;
+  onRefund: () => Promise<void>;
+  onTransfer: (recipient: string, amount: number) => Promise<void>;
 }) {
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
@@ -235,7 +261,7 @@ function PortfolioPositionCard({
 
   const claimable = isClaimable(item);
   const refundable = item.asset.status === 'Cancelled' && !item.refunded;
-  const canTransfer = (item.asset.status === 'Funded' || item.asset.status === 'Paid') && item.tokenBalance > 0;
+  const canTransfer = item.asset.status === 'Funded' && item.tokenBalance > 0;
 
   return (
     <article className="panel p-5 sm:p-6">
@@ -307,16 +333,18 @@ function PortfolioPositionCard({
         )}
       </div>
 
-      {!canUseConnectedWallet && claimable && (
+      {usingDemo && claimable && (
         <p className="mt-2 text-xs text-amber-200">
-          Connected wallet is missing, action uses demo fallback with x-wallet: {shortenAddress(wallet)}.
+          Backend snapshot unavailable, claim uses demo fallback with x-wallet: {shortenAddress(wallet)}.
         </p>
       )}
 
       {openTransfer && canTransfer && (
         <div className="mt-3 rounded-xl border border-white/10 bg-white/4 p-3">
           <p className="text-xs text-slate-400">
-            Secondary transfer is demo-backed here. Use allowlisted recipient wallet.
+            {usingDemo
+              ? 'Secondary transfer is demo-backed here. Use allowlisted recipient wallet.'
+              : 'Live flow validates and prepares transfer for an allowlisted recipient wallet.'}
           </p>
           <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_140px_auto]">
             <input
@@ -334,8 +362,8 @@ function PortfolioPositionCard({
               className="input-base"
             />
             <TxButton
-              label="Send"
-              pendingLabel="Sending..."
+              label={usingDemo ? 'Send' : 'Prepare'}
+              pendingLabel={usingDemo ? 'Sending...' : 'Preparing...'}
               onAction={async () => {
                 const numeric = Number.parseInt(amount, 10);
                 if (!recipient.trim() || !Number.isFinite(numeric) || numeric <= 0) {
@@ -346,7 +374,7 @@ function PortfolioPositionCard({
                   toast.error('Transfer amount exceeds token balance');
                   throw new Error('amount exceeds balance');
                 }
-                onTransfer(recipient.trim(), numeric);
+                await onTransfer(recipient.trim(), numeric);
                 setRecipient('');
                 setAmount('');
                 setOpenTransfer(false);

@@ -4,6 +4,8 @@ export interface CreateAssetDraftResponseDto {
   status: "Created";
   faceValue: string;
   dueDate: string;
+  debtorRefHash: string | null;
+  invoiceHash: string | null;
   assetPda: string;
   txSig: string | null;
   unsignedTx: string | null;

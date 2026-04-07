@@ -49,6 +49,24 @@ export class AssetsService {
     const assetPda = deriveAssetPda(programId, assetId);
     const id = randomUUID();
 
+    const chainResult = await this.orchestrate({
+      action: "create_asset",
+      mode: "sync",
+      wallet: issuerWallet,
+      entityType: "asset",
+      entityId: assetId,
+      payload: {
+        instruction: "create_asset",
+        assetId,
+        faceValue: dto.faceValue,
+        dueDate: dto.dueDate,
+        debtorRefHash: dto.debtorRefHash.trim(),
+        invoiceHash: dto.invoiceHash?.trim() || null,
+        assetPda,
+      },
+      txSig: dto.txSig,
+    });
+
     const asset = await this.prisma.asset.create({
       data: {
         id,
@@ -56,21 +74,9 @@ export class AssetsService {
         issuerWallet,
         faceValue,
         dueDate,
+        debtorRefHash: dto.debtorRefHash.trim(),
+        invoiceHash: dto.invoiceHash?.trim() || null,
         metadataUri: dto.metadataUri?.trim() || null,
-        assetPda,
-      },
-    });
-
-    const chainResult = await this.orchestrate({
-      action: "create_asset",
-      wallet: issuerWallet,
-      entityType: "asset",
-      entityId: asset.assetId,
-      payload: {
-        instruction: "create_asset",
-        assetId: asset.assetId,
-        faceValue: dto.faceValue,
-        dueDate: dto.dueDate,
         assetPda,
       },
     });
@@ -81,6 +87,8 @@ export class AssetsService {
       status: "Created",
       faceValue: asset.faceValue.toString(),
       dueDate: asset.dueDate.toISOString(),
+      debtorRefHash: asset.debtorRefHash,
+      invoiceHash: asset.invoiceHash,
       assetPda,
       txSig: chainResult.txSignature,
       unsignedTx: chainResult.unsignedTx,
@@ -96,11 +104,18 @@ export class AssetsService {
     const investorWallet = this.normalizeWallet(wallet);
     const normalizedAssetId = this.normalizeAssetId(assetId);
     await this.assertInvestorAllowlisted(investorWallet);
+    if (body.mode === "client") {
+      throw new AppException(
+        "CLIENT_MODE_UNSUPPORTED",
+        "Refund currently requires sync mode with a confirmed txSig.",
+        HttpStatus.BAD_REQUEST,
+      );
+    }
 
     const chainResult = await this.orchestrate({
       action: "refund",
       wallet: investorWallet,
-      mode: body.mode,
+      mode: "sync",
       entityType: "asset",
       entityId: normalizedAssetId,
       txSig: body.txSig,
@@ -212,6 +227,44 @@ export class AssetsService {
     }));
   }
 
+  async listAssets(): Promise<AssetDetailDto[]> {
+    const assets = await this.prisma.asset.findMany({
+      orderBy: { createdAt: "desc" },
+      select: {
+        assetId: true,
+        issuerWallet: true,
+        status: true,
+        faceValue: true,
+        dueDate: true,
+        debtorRefHash: true,
+        invoiceHash: true,
+        mint: true,
+        metadataUri: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    const snapshots = await this.getFundingSnapshots(assets.map((asset) => asset.assetId));
+    const expectedYield = this.expectedYieldPercent();
+
+    return assets.map((asset) => ({
+      assetId: asset.assetId,
+      issuerWallet: asset.issuerWallet,
+      status: asset.status,
+      faceValue: asset.faceValue.toString(),
+      dueDate: asset.dueDate.toISOString(),
+      debtorRefHash: asset.debtorRefHash,
+      invoiceHash: asset.invoiceHash,
+      mint: asset.mint,
+      metadataUri: asset.metadataUri,
+      expectedYield,
+      funding: snapshots.get(asset.assetId) ?? this.emptySnapshot(asset.faceValue),
+      createdAt: asset.createdAt.toISOString(),
+      updatedAt: asset.updatedAt.toISOString(),
+    }));
+  }
+
   async getAssetDetail(assetId: string): Promise<AssetDetailDto> {
     const normalized = this.normalizeAssetId(assetId);
     const asset = await this.prisma.asset.findUnique({
@@ -222,6 +275,8 @@ export class AssetsService {
         status: true,
         faceValue: true,
         dueDate: true,
+        debtorRefHash: true,
+        invoiceHash: true,
         mint: true,
         metadataUri: true,
         createdAt: true,
@@ -239,6 +294,8 @@ export class AssetsService {
       status: asset.status,
       faceValue: asset.faceValue.toString(),
       dueDate: asset.dueDate.toISOString(),
+      debtorRefHash: asset.debtorRefHash,
+      invoiceHash: asset.invoiceHash,
       mint: asset.mint,
       metadataUri: asset.metadataUri,
       expectedYield: this.expectedYieldPercent(),

@@ -56,6 +56,7 @@ export default function SubmitAssetPage() {
         discountBps,
         dueDateTs,
         debtorRefHash,
+        invoiceHash,
         issuerWallet: activeWallet,
       });
       setCreatedAssetId(asset.id);

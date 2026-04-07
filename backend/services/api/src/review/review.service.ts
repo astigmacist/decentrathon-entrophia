@@ -73,9 +73,11 @@ export class ReviewService {
     const chainResult = this.solanaService
       ? await this.solanaService.orchestrate({
       action: "verify_asset",
+      mode: "sync",
       wallet: verifierWallet,
       entityType: "asset",
       entityId: assetId,
+      txSig: body.txSig,
       payload: { instruction: "verify_asset", decision: body.decision },
     })
       : {

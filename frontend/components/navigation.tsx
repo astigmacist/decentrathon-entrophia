@@ -6,15 +6,15 @@ import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Menu, X } from 'lucide-react';
+import { LogOut, Menu, UserCircle2, X } from 'lucide-react';
 import { getHealth } from '@/lib/api';
 import { useRole } from '@/hooks/useRole';
 import { useActiveWallet } from '@/hooks/useActiveWallet';
+import { useAuth } from '@/hooks/useAuth';
 import { useTranslation } from '@/lib/i18n/useTranslation';
 import { useI18nStore } from '@/store/i18n-store';
 import { shortenAddress } from '@/lib/solana';
 import { cn } from '@/lib/utils';
-import type { UserRole } from '@/types';
 
 const NAV_LINKS = [
   { href: '/', key: 'nav.home', roles: ['investor', 'issuer', 'verifier', 'admin', 'unknown'] },
@@ -39,8 +39,9 @@ const WalletMultiButtonNoSSR = dynamic(
 
 export function Navigation() {
   const pathname = usePathname();
-  const { role, demoRole, setDemoRole } = useRole();
+  const { role } = useRole();
   const { connectedWallet, manualWallet, activeWallet, setManualWallet, clearManualWallet } = useActiveWallet();
+  const { status, isAuthenticated, user, signOut } = useAuth();
   const { t } = useTranslation();
   const { lang, setLang } = useI18nStore();
   const [open, setOpen] = useState(false);
@@ -61,6 +62,21 @@ export function Navigation() {
     : health
     ? 'border-emerald-500/35 bg-emerald-500/12 text-emerald-200'
     : 'border-white/15 bg-white/5 text-slate-300';
+
+  const authLabel = !connectedWallet
+    ? 'Wallet disconnected'
+    : status === 'authenticated'
+    ? 'Signed in'
+    : status === 'signing' || status === 'restoring'
+    ? 'Signing...'
+    : 'Sign-in required';
+  const authClass = !connectedWallet
+    ? 'border-white/15 bg-white/5 text-slate-300'
+    : status === 'authenticated'
+    ? 'border-teal-500/35 bg-teal-500/12 text-teal-200'
+    : status === 'signing' || status === 'restoring'
+    ? 'border-amber-500/35 bg-amber-500/12 text-amber-200'
+    : 'border-red-500/35 bg-red-500/12 text-red-200';
 
   return (
     <>
@@ -108,14 +124,17 @@ export function Navigation() {
             </span>
 
             <div className="hidden items-center gap-2 rounded-lg border border-white/12 bg-white/5 px-2 py-1.5 lg:flex">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">x-wallet</span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                {connectedWallet ? 'read-only' : 'x-wallet'}
+              </span>
               <input
                 value={manualWallet}
                 onChange={(event) => setManualWallet(event.target.value)}
-                placeholder={connectedWallet ?? 'enter wallet'}
-                className="w-[180px] bg-transparent text-xs text-slate-200 outline-none placeholder:text-slate-500"
+                placeholder={connectedWallet ? 'Connected wallet is active' : 'enter wallet'}
+                disabled={!!connectedWallet}
+                className="w-[180px] bg-transparent text-xs text-slate-200 outline-none placeholder:text-slate-500 disabled:cursor-not-allowed disabled:text-slate-500"
               />
-              {manualWallet.trim() && (
+              {manualWallet.trim() && !connectedWallet && (
                 <button
                   onClick={clearManualWallet}
                   className="rounded border border-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400 hover:bg-white/8 hover:text-white"
@@ -125,23 +144,9 @@ export function Navigation() {
               )}
             </div>
 
-            {process.env.NODE_ENV !== 'production' && (
-              <select
-                value={demoRole ?? 'unknown'}
-                onChange={(event) => {
-                  const next = event.target.value as UserRole;
-                  setDemoRole(next === 'unknown' ? null : next);
-                }}
-                className="hidden rounded-lg border border-white/12 bg-white/5 px-2 py-1.5 text-xs text-slate-300 outline-none lg:block"
-                title="Demo role"
-              >
-                <option value="unknown">Demo: Auto</option>
-                <option value="investor">Demo: Investor</option>
-                <option value="issuer">Demo: Issuer</option>
-                <option value="verifier">Demo: Verifier</option>
-                <option value="admin">Demo: Admin</option>
-              </select>
-            )}
+            <span className={cn('hidden rounded-full border px-2 py-0.5 text-[11px] font-semibold lg:inline-flex', authClass)}>
+              {authLabel}
+            </span>
 
             <button
               onClick={() => setLang(lang === 'en' ? 'ru' : 'en')}
@@ -151,7 +156,7 @@ export function Navigation() {
               {lang}
             </button>
 
-            {activeWallet && role !== 'unknown' && (
+            {activeWallet && role !== 'unknown' && isAuthenticated && (
               <span
                 className={cn(
                   'hidden rounded-full border px-2 py-0.5 text-[11px] font-semibold capitalize sm:inline-flex',
@@ -166,6 +171,25 @@ export function Navigation() {
               <span className="hidden max-w-[140px] truncate rounded-md border border-white/10 bg-white/4 px-2 py-0.5 text-[11px] font-mono text-slate-300 lg:inline-block">
                 {shortenAddress(activeWallet)}
               </span>
+            )}
+
+            {isAuthenticated && user && (
+              <>
+                <Link
+                  href="/profile"
+                  className="hidden items-center gap-1 rounded-lg border border-white/12 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:bg-white/10 hover:text-white lg:inline-flex"
+                >
+                  <UserCircle2 className="h-3.5 w-3.5" />
+                  {user.displayName?.trim() || 'Profile'}
+                </Link>
+                <button
+                  onClick={() => void signOut()}
+                  className="hidden items-center gap-1 rounded-lg border border-white/12 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:bg-white/10 hover:text-white lg:inline-flex"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Logout
+                </button>
+              </>
             )}
 
             <WalletMultiButtonNoSSR
@@ -200,23 +224,39 @@ export function Navigation() {
           <div className="app-container pt-24" onClick={(event) => event.stopPropagation()}>
             <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
               <div className="rounded-xl border border-white/10 bg-white/4 p-2.5">
-                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">x-wallet</p>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                  {connectedWallet ? 'read-only wallet' : 'x-wallet'}
+                </p>
                 <input
                   value={manualWallet}
                   onChange={(event) => setManualWallet(event.target.value)}
-                  placeholder={connectedWallet ?? 'enter wallet'}
-                  className="input-base py-2 text-xs"
+                  placeholder={connectedWallet ? 'Connected wallet is active' : 'enter wallet'}
+                  disabled={!!connectedWallet}
+                  className="input-base py-2 text-xs disabled:cursor-not-allowed disabled:text-slate-500"
                 />
                 <div className="mt-2 flex items-center justify-between">
                   <span className={cn('rounded-full border px-2 py-0.5 text-[11px] font-semibold', healthClass)}>
                     {healthLabel}
                   </span>
-                  {manualWallet.trim() && (
+                  {manualWallet.trim() && !connectedWallet && (
                     <button
                       onClick={clearManualWallet}
                       className="rounded border border-white/10 px-2 py-0.5 text-[11px] font-semibold text-slate-300"
                     >
                       Reset
+                    </button>
+                  )}
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className={cn('rounded-full border px-2 py-0.5 text-[11px] font-semibold', authClass)}>
+                    {authLabel}
+                  </span>
+                  {isAuthenticated && (
+                    <button
+                      onClick={() => void signOut()}
+                      className="rounded border border-white/10 px-2 py-0.5 text-[11px] font-semibold text-slate-300"
+                    >
+                      Logout
                     </button>
                   )}
                 </div>
@@ -237,6 +277,15 @@ export function Navigation() {
                   </Link>
                 );
               })}
+              {isAuthenticated && (
+                <Link
+                  href="/profile"
+                  onClick={() => setOpen(false)}
+                  className="block rounded-xl px-3 py-3 text-sm font-semibold text-slate-300 hover:bg-white/6"
+                >
+                  Profile
+                </Link>
+              )}
             </div>
           </div>
         </div>

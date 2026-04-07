@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getMarketplace, openFunding, closeFunding, recordPayment } from '@/lib/api';
+import { getAssets, openFunding, closeFunding, recordPayment, finalizeAsset } from '@/lib/api';
 import { StatusBadge } from '@/components/status-badge';
 import { TxButton } from '@/components/tx-button';
 import { formatUsdc, formatDate, shortenAddress } from '@/lib/solana';
@@ -25,8 +25,8 @@ export default function AdminPage() {
   const finalizeAssetDemo = useDemoStore((state) => state.finalizeAssetDemo);
 
   const { data: liveAssets, isLoading } = useQuery({
-    queryKey: ['marketplace'],
-    queryFn: getMarketplace,
+    queryKey: ['admin-assets'],
+    queryFn: getAssets,
     retry: 1,
   });
 
@@ -48,7 +48,11 @@ export default function AdminPage() {
 
   // Fall back to mock data
   const assets = liveAssets ?? demoAssets;
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['marketplace'] });
+  const invalidate = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ['admin-assets'] }),
+      qc.invalidateQueries({ queryKey: ['marketplace'] }),
+    ]);
 
   // Compute stats
   const totalFundingOpen = assets.filter((a) => a.status === 'FundingOpen').length;
@@ -137,7 +141,7 @@ function AdminAssetCard({
   recordPaymentDemo,
   finalizeAssetDemo,
 }: {
-  asset: Awaited<ReturnType<typeof getMarketplace>>[0];
+  asset: Awaited<ReturnType<typeof getAssets>>[0];
   onUpdate: () => void;
   operatorWallet: string;
   openFundingDemo: (assetId: string) => Asset;
@@ -238,8 +242,13 @@ function AdminAssetCard({
             label="Finalize Asset"
             pendingLabel="Finalizing..."
             onAction={async () => {
-              finalizeAssetDemo(asset.id);
-              toast.success('Demo asset finalized and closed!');
+              try {
+                await finalizeAsset(asset.id);
+                toast.success('Asset finalized and closed!');
+              } catch {
+                finalizeAssetDemo(asset.id);
+                toast.success('Demo asset finalized and closed!');
+              }
               onUpdate();
             }}
             variant="secondary"

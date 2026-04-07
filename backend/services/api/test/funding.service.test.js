@@ -22,6 +22,10 @@ function createConfigMock() {
   };
 }
 
+function recentFundingOpenedAt() {
+  return new Date(Date.now() - 60 * 60 * 1000);
+}
+
 function createPrismaMock() {
   return {
     user: {
@@ -46,7 +50,7 @@ function createPrismaMock() {
         asset: { update: async () => undefined },
         activityLog: {
           create: async () => undefined,
-          findFirst: async () => ({ createdAt: new Date("2026-04-02T10:00:00.000Z") }),
+          findFirst: async () => ({ createdAt: recentFundingOpenedAt() }),
         },
         investmentReceipt: {
           aggregate: async () => ({
@@ -110,7 +114,7 @@ test("buy primary validates allowlist and returns both amount fields", async () 
         { id: "asset-1", asset_id: "AST-3", status: "FundingOpen", face_value: 1_000_000000n },
       ],
       activityLog: {
-        findFirst: async () => ({ createdAt: new Date("2026-04-02T10:00:00.000Z") }),
+        findFirst: async () => ({ createdAt: recentFundingOpenedAt() }),
         create: async () => undefined,
       },
       asset: { update: async () => undefined },
@@ -143,7 +147,7 @@ test("buy primary rejects when status is not FundingOpen", async () => {
         { id: "asset-1", asset_id: "AST-4", status: "Verified", face_value: 1_000_000000n },
       ],
       activityLog: {
-        findFirst: async () => ({ createdAt: new Date("2026-04-02T10:00:00.000Z") }),
+        findFirst: async () => ({ createdAt: recentFundingOpenedAt() }),
         create: async () => undefined,
       },
       asset: { update: async () => undefined },
@@ -182,7 +186,7 @@ test("buy primary rejects amount above remaining funding", async () => {
         { id: "asset-1", asset_id: "AST-6", status: "FundingOpen", face_value: 1_000_000000n },
       ],
       activityLog: {
-        findFirst: async () => ({ createdAt: new Date("2026-04-02T10:00:00.000Z") }),
+        findFirst: async () => ({ createdAt: recentFundingOpenedAt() }),
         create: async () => undefined,
       },
       asset: { update: async () => undefined },
@@ -243,7 +247,7 @@ test("close funding transitions to Funded when target reached", async () => {
         { id: "asset-1", asset_id: "AST-8", status: "FundingOpen", face_value: 1_000_000000n },
       ],
       activityLog: {
-        findFirst: async () => ({ createdAt: new Date("2026-04-02T10:00:00.000Z") }),
+        findFirst: async () => ({ createdAt: recentFundingOpenedAt() }),
         create: async () => undefined,
       },
       asset: {

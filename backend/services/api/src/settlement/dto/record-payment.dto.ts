@@ -11,4 +11,8 @@ export class RecordPaymentDto {
   @IsOptional()
   @IsString()
   comment?: string;
+
+  @IsOptional()
+  @IsString()
+  txSig?: string;
 }

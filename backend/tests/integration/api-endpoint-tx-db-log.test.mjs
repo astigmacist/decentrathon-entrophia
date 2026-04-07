@@ -2,8 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { BACKEND_ROOT } from "../_root.mjs";
 
-const root = "c:/deceathron-back";
+const root = BACKEND_ROOT;
 
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 

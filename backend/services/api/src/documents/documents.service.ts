@@ -52,6 +52,13 @@ export class DocumentsService {
       },
     });
 
+    if (kind.toLowerCase() === "invoice") {
+      await this.prisma.asset.update({
+        where: { id: asset.id },
+        data: { invoiceHash: contentHash },
+      });
+    }
+
     await this.uploadMetadataBundle(asset.id, asset.assetId);
     return this.mapDocument(document);
   }
@@ -71,15 +78,26 @@ export class DocumentsService {
   }
 
   private async uploadMetadataBundle(assetId: string, publicAssetId: string): Promise<void> {
-    const documents = await this.prisma.document.findMany({
-      where: { assetId },
-      orderBy: { createdAt: "asc" },
-    });
+    const [asset, documents] = await Promise.all([
+      this.prisma.asset.findUnique({
+        where: { id: assetId },
+        select: {
+          debtorRefHash: true,
+          invoiceHash: true,
+        },
+      }),
+      this.prisma.document.findMany({
+        where: { assetId },
+        orderBy: { createdAt: "asc" },
+      }),
+    ]);
 
     const bundle: MetadataBundle = {
       version: 1,
       assetId: publicAssetId,
       generatedAt: new Date().toISOString(),
+      debtorRefHash: asset?.debtorRefHash ?? null,
+      invoiceHash: asset?.invoiceHash ?? null,
       invoiceHashRefs: documents
         .filter((document) => document.kind.toLowerCase() === "invoice")
         .map((document) => document.contentHash),
@@ -91,10 +109,15 @@ export class DocumentsService {
       })),
     };
 
-    await this.storageService.putObject({
+    const { fileUri } = await this.storageService.putObject({
       key: `assets/${publicAssetId}/metadata-bundle.json`,
       body: Buffer.from(JSON.stringify(bundle, null, 2), "utf8"),
       contentType: "application/json",
+    });
+
+    await this.prisma.asset.update({
+      where: { id: assetId },
+      data: { metadataUri: fileUri },
     });
   }
 

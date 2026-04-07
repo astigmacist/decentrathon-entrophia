@@ -2,6 +2,7 @@ import { MiddlewareConsumer, Module, NestModule, RequestMethod } from "@nestjs/c
 import { APP_INTERCEPTOR } from "@nestjs/core";
 import { AuditInterceptor } from "./audit/audit.interceptor";
 import { AuditModule } from "./audit/audit.module";
+import { AuthModule } from "./auth/auth.module";
 import { AppConfigModule } from "./config/config.module";
 import { DatabaseModule } from "./database/database.module";
 import { AssetsModule } from "./assets/assets.module";
@@ -17,12 +18,14 @@ import { SolanaModule } from "./solana/solana.module";
 import { TransfersModule } from "./transfers/transfers.module";
 import { UsersModule } from "./users/users.module";
 import { WhitelistModule } from "./whitelist/whitelist.module";
+import { AuthSessionMiddleware } from "./common/middleware/auth-session.middleware";
 
 @Module({
   imports: [
     AppConfigModule,
     DatabaseModule,
     AuditModule,
+    AuthModule,
     ActivityModule,
     AssetsModule,
     ClaimsModule,
@@ -46,7 +49,7 @@ import { WhitelistModule } from "./whitelist/whitelist.module";
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer
-      .apply(TraceIdMiddleware)
+      .apply(TraceIdMiddleware, AuthSessionMiddleware)
       .forRoutes({ path: "*path", method: RequestMethod.ALL });
   }
 }

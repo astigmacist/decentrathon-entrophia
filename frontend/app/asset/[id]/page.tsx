@@ -3,7 +3,6 @@
 import { type ReactNode, use, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { useWallet } from '@solana/wallet-adapter-react';
 import {
   ArrowLeft,
   Copy,
@@ -14,15 +13,19 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
+  buyPrimary,
+  claimAsset,
   closeFunding,
+  formatApiError,
   getActivity,
   getAsset,
   getDocuments,
   openFunding,
+  prepareTransfer,
   recordPayment,
+  refundAsset,
   verifyAsset,
 } from '@/lib/api';
-import { useAnchorProgram } from '@/lib/anchor';
 import { useRole } from '@/hooks/useRole';
 import { useActiveWallet } from '@/hooks/useActiveWallet';
 import { useDemoStore } from '@/store/demo-store';
@@ -162,6 +165,7 @@ export default function AssetPage({ params }: AssetPageProps) {
       ? Math.min((asset.fundingRaised / asset.fundingTarget) * 100, 100)
       : 0;
   const fundingRemaining = Math.max(asset.fundingTarget - asset.fundingRaised, 0);
+  const usingDemo = !liveAsset;
 
   const refreshAll = () => {
     void refetchAsset();
@@ -368,6 +372,7 @@ export default function AssetPage({ params }: AssetPageProps) {
             asset={asset}
             role={role}
             activeWallet={activeWallet}
+            usingDemo={usingDemo}
             onUpdated={refreshAll}
           />
 
@@ -390,16 +395,15 @@ function ContextActions({
   asset,
   role,
   activeWallet,
+  usingDemo,
   onUpdated,
 }: {
   asset: Asset;
   role: UserRole;
   activeWallet: string | null;
+  usingDemo: boolean;
   onUpdated: () => void;
 }) {
-  const { publicKey } = useWallet();
-  const { buyPrimary, claimPayout } = useAnchorProgram();
-
   const investDemo = useDemoStore((state) => state.investDemo);
   const verifyAssetDemo = useDemoStore((state) => state.verifyAssetDemo);
   const openFundingDemo = useDemoStore((state) => state.openFundingDemo);
@@ -432,8 +436,6 @@ function ContextActions({
     );
   }
 
-  const connectedWallet = publicKey?.toBase58() ?? null;
-
   if (role === 'investor') {
     return (
       <div className="panel p-5 sm:p-6">
@@ -455,11 +457,6 @@ function ContextActions({
                 placeholder="1000"
                 className="input-base mt-3"
               />
-              {!connectedWallet && (
-                <p className="mt-2 text-xs text-amber-200">
-                  Wallet not connected: action runs in demo mode using x-wallet.
-                </p>
-              )}
               <TxButton
                 label="Invest in funding round"
                 pendingLabel="Submitting..."
@@ -475,19 +472,21 @@ function ContextActions({
                     throw new Error('amount above max');
                   }
 
-                  try {
-                    if (!connectedWallet) {
-                      throw new Error('demo fallback');
-                    }
-                    await buyPrimary(asset.id, parseUsdc(numericAmount));
-                    toast.success('On-chain buy transaction submitted');
-                  } catch {
+                  if (usingDemo) {
                     investDemo({
                       assetId: asset.id,
                       investorWallet: activeWallet,
                       amount: parseUsdc(numericAmount),
                     });
                     toast.success('Demo investment recorded');
+                  } else {
+                    try {
+                      const result = await buyPrimary(asset.id, parseUsdc(numericAmount));
+                      toast.success(`Investment submitted: ${shortenAddress(result.txSig, 6)}`);
+                    } catch (error) {
+                      toast.error(formatApiError(error));
+                      throw error;
+                    }
                   }
 
                   setInvestAmount('');
@@ -508,18 +507,20 @@ function ContextActions({
                 pendingLabel="Claiming..."
                 className="mt-3 w-full justify-center"
                 onAction={async () => {
-                  try {
-                    if (!connectedWallet) {
-                      throw new Error('demo fallback');
-                    }
-                    await claimPayout(asset.id);
-                    toast.success('On-chain claim submitted');
-                  } catch {
+                  if (usingDemo) {
                     claimPayoutDemo({
                       assetId: asset.id,
                       investorWallet: activeWallet,
                     });
                     toast.success('Demo payout claimed');
+                  } else {
+                    try {
+                      const result = await claimAsset(asset.id);
+                      toast.success(result.status === 'confirmed' ? 'Payout claimed' : 'Claim prepared');
+                    } catch (error) {
+                      toast.error(formatApiError(error));
+                      throw error;
+                    }
                   }
                   onUpdated();
                 }}
@@ -538,21 +539,37 @@ function ContextActions({
                 pendingLabel="Processing..."
                 className="mt-3 w-full justify-center"
                 onAction={async () => {
-                  refundDemo({
-                    assetId: asset.id,
-                    investorWallet: activeWallet,
-                  });
-                  toast.success('Demo refund processed');
+                  if (usingDemo) {
+                    refundDemo({
+                      assetId: asset.id,
+                      investorWallet: activeWallet,
+                    });
+                    toast.success('Demo refund processed');
+                  } else {
+                    try {
+                      await refundAsset(asset.id);
+                      toast.success('Refund processed');
+                    } catch (error) {
+                      toast.error(formatApiError(error));
+                      throw error;
+                    }
+                  }
                   onUpdated();
                 }}
               />
             </div>
           )}
 
-          {(asset.status === 'Funded' || asset.status === 'Paid') && (
+          {asset.status === 'Funded' && (
             <div className="rounded-xl border border-white/10 bg-white/4 p-4">
-              <p className="text-sm font-semibold text-slate-200">Secondary transfer (demo)</p>
-              <p className="mt-1 text-xs text-slate-500">Transfer to an allowlisted wallet for demo flow.</p>
+              <p className="text-sm font-semibold text-slate-200">
+                {usingDemo ? 'Secondary transfer (demo)' : 'Secondary transfer'}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {usingDemo
+                  ? 'Transfer to an allowlisted wallet for demo flow.'
+                  : 'Validate and prepare transfer for an allowlisted investor wallet.'}
+              </p>
               <div className="mt-3 grid gap-2">
                 <input
                   value={recipientWallet}
@@ -569,8 +586,8 @@ function ContextActions({
                   className="input-base"
                 />
                 <TxButton
-                  label="Send transfer"
-                  pendingLabel="Sending..."
+                  label={usingDemo ? 'Send transfer' : 'Prepare transfer'}
+                  pendingLabel={usingDemo ? 'Sending...' : 'Preparing...'}
                   className="justify-center"
                   onAction={async () => {
                     const amount = Number.parseInt(transferAmount, 10);
@@ -578,16 +595,36 @@ function ContextActions({
                       toast.error('Fill recipient and valid token amount');
                       throw new Error('invalid transfer data');
                     }
-                    transferDemo({
-                      assetId: asset.id,
-                      investorWallet: activeWallet,
-                      recipientWallet: recipientWallet.trim(),
-                      amount,
-                    });
-                    toast.success('Demo transfer recorded');
+
+                    if (usingDemo) {
+                      transferDemo({
+                        assetId: asset.id,
+                        investorWallet: activeWallet,
+                        recipientWallet: recipientWallet.trim(),
+                        amount,
+                      });
+                      toast.success('Demo transfer recorded');
+                      onUpdated();
+                    } else {
+                      try {
+                        const prepared = await prepareTransfer({
+                          assetId: asset.id,
+                          fromWallet: activeWallet,
+                          toWallet: recipientWallet.trim(),
+                          amountBaseUnits: amount * 1_000_000,
+                        });
+                        if (!prepared.validation.allowed) {
+                          throw new Error(prepared.validation.hints[0] ?? 'Transfer is not allowed');
+                        }
+                        toast.success('Transfer validated and prepared');
+                      } catch (error) {
+                        toast.error(formatApiError(error));
+                        throw error;
+                      }
+                    }
+
                     setRecipientWallet('');
                     setTransferAmount('');
-                    onUpdated();
                   }}
                 />
               </div>

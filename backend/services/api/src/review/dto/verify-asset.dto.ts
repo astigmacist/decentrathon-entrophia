@@ -7,4 +7,8 @@ export class VerifyAssetDto {
   @IsOptional()
   @IsString()
   comment?: string;
+
+  @IsOptional()
+  @IsString()
+  txSig?: string;
 }

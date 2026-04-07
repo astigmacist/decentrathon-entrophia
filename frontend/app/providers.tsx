@@ -13,6 +13,7 @@ import {
 import { RPC_URL } from '@/lib/solana';
 import { RoleProvider } from '@/hooks/useRole';
 import { ActiveWalletProvider } from '@/hooks/useActiveWallet';
+import { AuthProvider } from '@/hooks/useAuth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 
@@ -39,10 +40,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <WalletProvider wallets={wallets} autoConnect={false}>
           <WalletModalProvider>
             <ActiveWalletProvider>
-              <RoleProvider>
-                {children}
-                <Toaster richColors position="top-right" />
-              </RoleProvider>
+              <AuthProvider>
+                <RoleProvider>
+                  {children}
+                  <Toaster richColors position="top-right" />
+                </RoleProvider>
+              </AuthProvider>
             </ActiveWalletProvider>
           </WalletModalProvider>
         </WalletProvider>

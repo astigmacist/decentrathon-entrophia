@@ -221,4 +221,7 @@ API:
 ## Лицензия и вклад
 
 Уточните лицензию при публикации. Pull request’ы и issues — по стандартному процессу GitHub.
+<<<<<<< Updated upstream
 
+=======
+>>>>>>> Stashed changes

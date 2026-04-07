@@ -1,4 +1,5 @@
 import { Body, Controller, Headers, Param, Post } from "@nestjs/common";
+import { FinalizeAssetDto } from "./dto/finalize-asset.dto";
 import { RecordPaymentDto } from "./dto/record-payment.dto";
 import { SettlementService } from "./settlement.service";
 import { FinalizeAssetResponseDto, RecordPaymentResponseDto } from "./settlement.types";
@@ -20,7 +21,8 @@ export class SettlementController {
   async finalizeAsset(
     @Param("assetId") assetId: string,
     @Headers("x-wallet") wallet: string | undefined,
+    @Body() body: FinalizeAssetDto,
   ): Promise<FinalizeAssetResponseDto> {
-    return this.settlementService.finalizeAsset(assetId, wallet);
+    return this.settlementService.finalizeAsset(assetId, wallet, body.txSig);
   }
 }

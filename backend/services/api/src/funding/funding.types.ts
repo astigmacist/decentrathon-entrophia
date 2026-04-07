@@ -56,6 +56,8 @@ export interface AssetDetailDto {
   status: AssetStatus;
   faceValue: string;
   dueDate: string;
+  debtorRefHash: string | null;
+  invoiceHash: string | null;
   mint: string | null;
   metadataUri: string | null;
   expectedYield: string;

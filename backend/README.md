@@ -20,10 +20,11 @@ This repository contains two Anchor programs, a NestJS API, and an indexer used 
    - `TRANSFER_HOOK_PROGRAM_ID`
    - all role wallets
 3. Sync `Anchor.toml` `[programs.devnet]` IDs with deployed program IDs.
-4. Start infra:
+4. Important: the API does not self-sign Solana writes. For backend mutating flows in `sync` mode, provide a fresh confirmed `txSig` from the client, and the submitted transaction must carry the expected `memo` in the form `rwa:<action>:<entityType>:<entityId>:<wallet>`.
+5. Start infra:
    - `docker compose -f docker/docker-compose.yml up -d`
-5. Migrate DB:
+6. Migrate DB:
    - `cd services/api && npm run db:migrate`
-6. Start API (port `3001`) and indexer in separate terminals:
+7. Start API (port `3001`) and indexer in separate terminals:
    - `cd services/api && npm run dev`
    - `cd services/indexer && npm run dev`

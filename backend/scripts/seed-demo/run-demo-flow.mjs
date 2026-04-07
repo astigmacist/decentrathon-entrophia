@@ -1,5 +1,6 @@
 import { execSync } from "node:child_process";
 import {
+  ROOT_DIR,
   apiRequest,
   assertOk,
   demoAssetId,
@@ -13,7 +14,7 @@ const assetId = demoAssetId();
 
 function runScript(filename) {
   execSync(`node scripts/seed-demo/${filename}`, {
-    cwd: "c:/deceathron-back",
+    cwd: ROOT_DIR,
     stdio: "inherit",
   });
 }

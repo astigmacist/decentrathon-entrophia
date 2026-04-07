@@ -1,11 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { execSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 
-export const ROOT_DIR = "c:/deceathron-back";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+export const ROOT_DIR = resolve(__dirname, "..", "..");
 
 if (existsSync(resolve(ROOT_DIR, ".env"))) {
   dotenv.config({ path: resolve(ROOT_DIR, ".env"), override: false });

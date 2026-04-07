@@ -24,14 +24,17 @@ export class FundingService {
   async openFunding(
     assetId: string,
     wallet: string | undefined,
+    txSig: string | undefined,
   ): Promise<OpenFundingResponseDto> {
     const operatorWallet = this.normalizeWallet(wallet);
     await this.assertVerifierOrAdmin(operatorWallet);
     const chainResult = await this.orchestrate({
       action: "open_funding",
+      mode: "sync",
       wallet: operatorWallet,
       entityType: "asset",
       entityId: assetId,
+      txSig,
       payload: { instruction: "open_funding" },
     });
 
@@ -91,6 +94,7 @@ export class FundingService {
     const amountUsdcBase = this.parsePositiveBaseUnits(amountUsdcBaseUnits);
     const chainResult = await this.orchestrate({
       action: "buy_primary",
+      mode: "sync",
       wallet: investorWallet,
       entityType: "asset",
       entityId: assetId,
@@ -210,14 +214,17 @@ export class FundingService {
   async closeFunding(
     assetId: string,
     wallet: string | undefined,
+    txSig: string | undefined,
   ): Promise<CloseFundingResponseDto> {
     const operatorWallet = this.normalizeWallet(wallet);
     await this.assertVerifierOrAdmin(operatorWallet);
     const chainResult = await this.orchestrate({
       action: "close_funding",
+      mode: "sync",
       wallet: operatorWallet,
       entityType: "asset",
       entityId: assetId,
+      txSig,
       payload: { instruction: "close_funding" },
     });
 

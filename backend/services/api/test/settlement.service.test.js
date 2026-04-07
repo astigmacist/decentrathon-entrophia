@@ -64,3 +64,15 @@ test("record payment rejects when evidenceHash is empty", async () => {
     (err) => err instanceof AppException && err.code === "VALIDATION_ERROR",
   );
 });
+
+test("finalize asset rejects attestor role because on-chain finalize is admin-only", async () => {
+  const prisma = createPrismaMock();
+  prisma.user.findUnique = async () => ({ role: "Attestor", active: true });
+
+  const service = new SettlementService(prisma);
+
+  await assert.rejects(
+    () => service.finalizeAsset("AST-1", "attestor-wallet", undefined),
+    (err) => err instanceof AppException && err.code === "FORBIDDEN_ROLE",
+  );
+});

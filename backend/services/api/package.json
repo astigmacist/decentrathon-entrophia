@@ -5,7 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "dev": "nest start --watch",
-    "start": "node dist/main.js",
+    "start": "node dist/src/main.js",
     "start:dev": "nest start --watch",
     "build": "nest build",
     "lint": "npm run typecheck",
@@ -29,7 +29,8 @@
     "dotenv": "^16.4.5",
     "joi": "^17.13.3",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.17",

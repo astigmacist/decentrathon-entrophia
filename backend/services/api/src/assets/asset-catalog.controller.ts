@@ -11,6 +11,11 @@ export class AssetCatalogController {
     return this.assetsService.getMarketplace();
   }
 
+  @Get("assets")
+  async getAssets(): Promise<AssetDetailDto[]> {
+    return this.assetsService.listAssets();
+  }
+
   @Get("assets/:assetId")
   async getAssetDetail(@Param("assetId") assetId: string): Promise<AssetDetailDto> {
     return this.assetsService.getAssetDetail(assetId);

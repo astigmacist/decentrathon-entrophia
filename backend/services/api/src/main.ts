@@ -11,7 +11,7 @@ async function bootstrap(): Promise<void> {
   app.enableCors({
     origin: true,
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
-    allowedHeaders: ["Content-Type", "x-wallet", "x-trace-id"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-wallet", "x-trace-id"],
     exposedHeaders: ["x-trace-id"],
   });
 

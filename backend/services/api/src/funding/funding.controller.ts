@@ -1,5 +1,7 @@
 import { Body, Controller, Get, Headers, Param, Post } from "@nestjs/common";
 import { BuyPrimaryDto } from "./dto/buy-primary.dto";
+import { CloseFundingDto } from "./dto/close-funding.dto";
+import { OpenFundingDto } from "./dto/open-funding.dto";
 import {
   BuyPrimaryResponseDto,
   CloseFundingResponseDto,
@@ -15,8 +17,9 @@ export class FundingController {
   async openFunding(
     @Param("assetId") assetId: string,
     @Headers("x-wallet") wallet: string | undefined,
+    @Body() body: OpenFundingDto,
   ): Promise<OpenFundingResponseDto> {
-    return this.fundingService.openFunding(assetId, wallet);
+    return this.fundingService.openFunding(assetId, wallet, body.txSig);
   }
 
   @Post("assets/:assetId/buy-primary")
@@ -37,7 +40,8 @@ export class FundingController {
   async closeFunding(
     @Param("assetId") assetId: string,
     @Headers("x-wallet") wallet: string | undefined,
+    @Body() body: CloseFundingDto,
   ): Promise<CloseFundingResponseDto> {
-    return this.fundingService.closeFunding(assetId, wallet);
+    return this.fundingService.closeFunding(assetId, wallet, body.txSig);
   }
 }
